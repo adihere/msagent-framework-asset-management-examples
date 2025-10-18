@@ -1,0 +1,3 @@
+# Environment variables
+.env
+financial_portfolio_scanner/config/.env
