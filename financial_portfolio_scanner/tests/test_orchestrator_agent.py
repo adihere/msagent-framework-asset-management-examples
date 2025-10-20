@@ -46,7 +46,7 @@ class TestPortfolioScanOrchestrator:
             orchestrator: The test orchestrator instance
         """
         # Mock the reporting agent's generate_report method
-        orchestrator.reporting_agent.generate_report = MagicMock(return_value={"report": "Test report"})
+        orchestrator.reporting_agent.generate_report = AsyncMock(return_value={"report": "Test report"})
         
         # Mock the tool functions
         with patch('agents.orchestrator_agent.get_portfolio_holdings') as mock_get_holdings, \
@@ -149,7 +149,7 @@ class TestPortfolioScanOrchestrator:
             orchestrator: The test orchestrator instance
         """
         # Mock the reporting agent's generate_report method
-        orchestrator.reporting_agent.generate_report = MagicMock(return_value={"report": "Test report"})
+        orchestrator.reporting_agent.generate_report = AsyncMock(return_value={"report": "Test report"})
         
         # Mock the tool functions
         with patch('agents.orchestrator_agent.get_portfolio_holdings') as mock_get_holdings, \

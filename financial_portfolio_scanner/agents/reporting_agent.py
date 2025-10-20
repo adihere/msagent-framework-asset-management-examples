@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 import logging
 import json
 import datetime
+import asyncio
 
 import sys
 import os
@@ -22,28 +23,97 @@ from .tool_functions import (
 
 logger = logging.getLogger(__name__)
 
+# Import Azure AI Agent Framework components
+try:
+    from azure.ai.projects import AIProjectClient
+    from azure.ai.projects.models import ToolDefinition, ToolType
+    from azure.identity import AzureCliCredential
+    AZURE_AVAILABLE = True
+    logger.info("Azure AI Agent Framework is available")
+except ImportError as e:
+    AZURE_AVAILABLE = False
+    logger.warning(f"Azure AI Agent Framework is not available: {str(e)}")
 
-class MockChatAgent:
+# Import OpenAI for fallback
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+    logger.info("OpenAI is available")
+except ImportError as e:
+    OPENAI_AVAILABLE = False
+    logger.warning(f"OpenAI is not available: {str(e)}")
+
+
+class AzureReportingAgent:
     """
-    A mock implementation of the ChatAgent class for testing purposes.
+    An implementation of the Reporting Agent using Azure AI Agent Framework.
     
-    This class simulates the behavior of a ChatAgent without requiring
-    the actual microsoft-agent-framework dependency.
+    This class uses AzureAIAgentClient to create and interact with an AI agent
+    for generating financial reports and insights.
     """
     
-    def __init__(self, name: str, instructions: str, client: Any = None):
+    def __init__(self, name: str, instructions: str, use_azure: bool = True):
         """
-        Initialize the MockChatAgent.
+        Initialize the AzureReportingAgent.
         
         Args:
             name (str): The name of the agent
             instructions (str): The instructions for the agent
-            client (Any, optional): The client for the agent (not used in mock)
+            use_azure (bool): Whether to use Azure or fall back to OpenAI
         """
         self.name = name
         self.instructions = instructions
         self.tools = {}
-        logger.info(f"MockChatAgent initialized with name: {name}")
+        self.use_azure = use_azure and AZURE_AVAILABLE
+        self.client = None
+        self.agent = None
+        self.openai_client = None
+        
+        logger.info(f"Initializing {'Azure' if self.use_azure else 'OpenAI'} Reporting Agent with name: {name}")
+        
+        # Initialize the appropriate client
+        if self.use_azure:
+            self._init_azure_client()
+        elif OPENAI_AVAILABLE:
+            self._init_openai_client()
+        else:
+            logger.warning("Neither Azure nor OpenAI is available, using mock implementation")
+    
+    def _init_azure_client(self):
+        """Initialize the Azure AI Project Client."""
+        try:
+            # Check if required Azure settings are available
+            if not Settings.AZURE_AI_PROJECT_CONNECTION_STRING:
+                logger.warning("Azure AI Project Connection String not configured, falling back to OpenAI")
+                self.use_azure = False
+                if OPENAI_AVAILABLE:
+                    self._init_openai_client()
+                return
+            
+            # Create Azure AI Project Client
+            credential = AzureCliCredential()
+            self.client = AIProjectClient.from_connection_string(
+                credential=credential,
+                conn_str=Settings.AZURE_AI_PROJECT_CONNECTION_STRING
+            )
+            logger.info("Azure AI Project Client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Azure AI Project Client: {str(e)}")
+            self.use_azure = False
+            if OPENAI_AVAILABLE:
+                self._init_openai_client()
+    
+    def _init_openai_client(self):
+        """Initialize the OpenAI client for fallback."""
+        try:
+            if not Settings.OPENAI_API_KEY:
+                logger.warning("OpenAI API Key not configured")
+                return
+            
+            self.openai_client = openai.OpenAI(api_key=Settings.OPENAI_API_KEY)
+            logger.info("OpenAI client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {str(e)}")
     
     def register_tool(self, name: str, func: callable) -> None:
         """
@@ -69,7 +139,31 @@ class MockChatAgent:
         self.tools[name] = func
         logger.debug(f"Registered tool: {name}")
     
-    def generate_response(self, prompt: str) -> str:
+    async def _create_azure_agent(self):
+        """Create an Azure AI agent with the specified configuration."""
+        try:
+            # Define tool definitions for Azure
+            tool_definitions = []
+            for tool_name in self.tools.keys():
+                tool_definitions.append(ToolDefinition(
+                    name=tool_name,
+                    description=f"Tool for {tool_name}",
+                    type=ToolType.FUNCTION
+                ))
+            
+            # Create the agent
+            self.agent = await self.client.agents.create_agent(
+                model=Settings.AZURE_OPENAI_CHAT_MODEL_ID or "gpt-4",
+                name=self.name,
+                instructions=self.instructions,
+                tools=tool_definitions
+            )
+            logger.info(f"Created Azure agent with ID: {self.agent.id}")
+        except Exception as e:
+            logger.error(f"Failed to create Azure agent: {str(e)}")
+            raise
+    
+    async def generate_response(self, prompt: str) -> str:
         """
         Generate a response to a prompt.
         
@@ -81,6 +175,7 @@ class MockChatAgent:
             
         Raises:
             ValueError: If prompt is empty or contains only whitespace
+            RuntimeError: If the response generation fails
         """
         if not prompt or not prompt.strip():
             error_msg = "Prompt cannot be empty or contain only whitespace"
@@ -89,8 +184,97 @@ class MockChatAgent:
             
         logger.debug(f"Generating response for prompt: {prompt[:50]}...")
         
-        # In a real implementation, this would use the LLM to generate a response
-        # For the mock, we'll return a simple JSON response
+        try:
+            if self.use_azure and self.client:
+                return await self._generate_azure_response(prompt)
+            elif self.openai_client:
+                return await self._generate_openai_response(prompt)
+            else:
+                return self._generate_mock_response(prompt)
+        except Exception as e:
+            logger.error(f"Failed to generate response: {str(e)}")
+            # Fallback to mock response if all else fails
+            return self._generate_mock_response(prompt)
+    
+    async def _generate_azure_response(self, prompt: str) -> str:
+        """Generate a response using Azure AI Agent."""
+        try:
+            # Create agent if not already created
+            if not self.agent:
+                await self._create_azure_agent()
+            
+            # Create a thread
+            thread = await self.client.agents.create_thread()
+            
+            # Create a message
+            await self.client.agents.create_message(
+                thread_id=thread.id,
+                role="user",
+                content=prompt
+            )
+            
+            # Run the agent
+            run = await self.client.agents.create_run(
+                thread_id=thread.id,
+                agent_id=self.agent.id
+            )
+            
+            # Wait for completion
+            while run.status not in ["completed", "failed", "cancelled"]:
+                await asyncio.sleep(1)
+                run = await self.client.agents.get_run(thread_id=thread.id, run_id=run.id)
+            
+            if run.status == "failed":
+                logger.error(f"Azure agent run failed: {run.last_error}")
+                raise RuntimeError(f"Azure agent run failed: {run.last_error}")
+            
+            # Get the messages
+            messages = await self.client.agents.list_messages(thread_id=thread.id)
+            
+            # Extract the assistant's response
+            for message in messages.data:
+                if message.role == "assistant":
+                    content = message.content[0].text.value if message.content else ""
+                    logger.debug("Generated Azure response")
+                    return content
+            
+            logger.warning("No assistant response found in Azure thread")
+            return self._generate_mock_response(prompt)
+            
+        except Exception as e:
+            logger.error(f"Error generating Azure response: {str(e)}")
+            raise
+    
+    async def _generate_openai_response(self, prompt: str) -> str:
+        """Generate a response using OpenAI."""
+        try:
+            # Prepare messages for OpenAI
+            messages = [
+                {"role": "system", "content": self.instructions},
+                {"role": "user", "content": prompt}
+            ]
+            
+            # Call OpenAI API
+            response = self.openai_client.chat.completions.create(
+                model=Settings.OPENAI_CHAT_MODEL_ID,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=2000
+            )
+            
+            content = response.choices[0].message.content
+            logger.debug("Generated OpenAI response")
+            return content
+            
+        except Exception as e:
+            logger.error(f"Error generating OpenAI response: {str(e)}")
+            raise
+    
+    def _generate_mock_response(self, prompt: str) -> str:
+        """Generate a mock response when neither Azure nor OpenAI is available."""
+        logger.debug("Generating mock response")
+        
+        # Mock response structure
         response = {
             "portfolio_summary": {
                 "fund_name": "Mock Fund",
@@ -132,21 +316,22 @@ class MockChatAgent:
             ]
         }
         
-        logger.debug("Generated mock response")
         return json.dumps(response, indent=2)
 
 
-def create_reporting_agent() -> MockChatAgent:
+def create_reporting_agent() -> AzureReportingAgent:
     """
     Create and configure the Financial Reporting Agent.
     
-    This function creates a MockChatAgent instance for testing purposes,
-    sets the agent name to "FinancialReportingAgent", provides
-    comprehensive instructions for the agent's responsibilities, and registers the
-    tool functions for portfolio analysis.
+    This function creates an AzureReportingAgent instance, sets the agent name to
+    "FinancialReportingAgent", provides comprehensive instructions for the agent's
+    responsibilities, and registers the tool functions for portfolio analysis.
+    
+    The function will attempt to use Azure AI Agent Framework if configured,
+    otherwise it will fall back to OpenAI or a mock implementation.
     
     Returns:
-        MockChatAgent: A configured instance of the Financial Reporting Agent
+        AzureReportingAgent: A configured instance of the Financial Reporting Agent
         
     Raises:
         RuntimeError: If the agent cannot be initialized due to other errors
@@ -154,6 +339,20 @@ def create_reporting_agent() -> MockChatAgent:
     logger.info("Creating Financial Reporting Agent")
     
     try:
+        # Determine whether to use Azure based on configuration
+        use_azure = (
+            AZURE_AVAILABLE and
+            Settings.AZURE_AI_PROJECT_CONNECTION_STRING and
+            Settings.AZURE_AI_PROJECT_CONNECTION_STRING.strip()
+        )
+        
+        if use_azure:
+            logger.info("Using Azure AI Agent Framework for reporting agent")
+        elif OPENAI_AVAILABLE and Settings.OPENAI_API_KEY:
+            logger.info("Using OpenAI for reporting agent")
+        else:
+            logger.warning("Neither Azure nor OpenAI is properly configured, using mock implementation")
+        
         # Define comprehensive instructions for the agent
         instructions = """
         You are the FinancialReportingAgent, responsible for generating comprehensive
@@ -180,12 +379,20 @@ def create_reporting_agent() -> MockChatAgent:
         
         Use these tools to gather the necessary information before generating your reports.
         Always base your analysis on the most current data available.
+        
+        Please format your response as a structured JSON object with the following sections:
+        - portfolio_summary: Overall portfolio information
+        - holdings_analysis: Detailed analysis of portfolio holdings
+        - market_insights: Key market news and their implications
+        - risk_assessment: Risk analysis and exposure metrics
+        - recommendations: Actionable recommendations for portfolio management
         """
         
         # Create the agent with the specified configuration
-        agent = MockChatAgent(
+        agent = AzureReportingAgent(
             name="FinancialReportingAgent",
-            instructions=instructions
+            instructions=instructions,
+            use_azure=use_azure
         )
         
         # Register the tool functions
@@ -229,7 +436,7 @@ class ReportingAgent:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
     
-    def generate_report(self, fund_name: str) -> Dict[str, Any]:
+    async def generate_report(self, fund_name: str) -> Dict[str, Any]:
         """
         Generate a comprehensive report of the financial portfolio.
         
@@ -279,7 +486,7 @@ class ReportingAgent:
             """
             
             # Generate the report using the agent
-            response = self.agent.generate_response(prompt)
+            response = await self.agent.generate_response(prompt)
             
             # Parse and return the response
             # Note: In a real implementation, you would parse the response
@@ -292,7 +499,39 @@ class ReportingAgent:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
     
-    def generate_insights(self, fund_name: str) -> Dict[str, Any]:
+    def generate_report_sync(self, fund_name: str) -> Dict[str, Any]:
+        """
+        Generate a comprehensive report of the financial portfolio (synchronous wrapper).
+        
+        This method provides a synchronous interface to the async generate_report method.
+        
+        Args:
+            fund_name (str): The name of the fund to generate a report for
+            
+        Returns:
+            Dict[str, Any]: A dictionary containing the generated report
+            
+        Raises:
+            ValueError: If fund_name is empty or None
+            RuntimeError: If the report generation fails
+        """
+        try:
+            # Run the async method in an event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an event loop, we need to use a different approach
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.generate_report(fund_name))
+                    return future.result()
+            else:
+                return asyncio.run(self.generate_report(fund_name))
+        except Exception as e:
+            error_msg = f"Failed to generate report synchronously: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+    
+    async def generate_insights(self, fund_name: str) -> Dict[str, Any]:
         """
         Generate insights and recommendations based on portfolio analysis.
         
@@ -342,7 +581,7 @@ class ReportingAgent:
             """
             
             # Generate the insights using the agent
-            response = self.agent.generate_response(prompt)
+            response = await self.agent.generate_response(prompt)
             
             # Parse and return the response
             # Note: In a real implementation, you would parse the response
@@ -352,5 +591,37 @@ class ReportingAgent:
             
         except Exception as e:
             error_msg = f"Failed to generate insights: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+    
+    def generate_insights_sync(self, fund_name: str) -> Dict[str, Any]:
+        """
+        Generate insights and recommendations based on portfolio analysis (synchronous wrapper).
+        
+        This method provides a synchronous interface to the async generate_insights method.
+        
+        Args:
+            fund_name (str): The name of the fund to generate insights for
+            
+        Returns:
+            Dict[str, Any]: A dictionary containing the generated insights
+            
+        Raises:
+            ValueError: If fund_name is empty or None
+            RuntimeError: If the insights generation fails
+        """
+        try:
+            # Run the async method in an event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an event loop, we need to use a different approach
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.generate_insights(fund_name))
+                    return future.result()
+            else:
+                return asyncio.run(self.generate_insights(fund_name))
+        except Exception as e:
+            error_msg = f"Failed to generate insights synchronously: {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)

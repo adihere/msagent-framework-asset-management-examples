@@ -109,7 +109,7 @@ class PortfolioScanOrchestrator:
             
             # Step 4: Generate a comprehensive report using the reporting agent
             logger.info("Step 4: Generating comprehensive report")
-            report_result = self.reporting_agent.generate_report(fund_name)
+            report_result = await self.reporting_agent.generate_report(fund_name)
             
             # Extract action items from risk analysis
             try:

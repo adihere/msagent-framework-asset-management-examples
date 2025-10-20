@@ -283,7 +283,7 @@ class TestTestPortfolioScan:
             mock_scan_result: Mock scan result
         """
         # Setup mock
-        mock_orchestrator.scan_portfolio.return_value = mock_scan_result
+        mock_orchestrator.scan_portfolio = AsyncMock(return_value=mock_scan_result)
         
         # Patch the PortfolioScanOrchestrator to return our mock
         with patch('main.PortfolioScanOrchestrator', return_value=mock_orchestrator):
@@ -304,7 +304,7 @@ class TestTestPortfolioScan:
             mock_scan_result: Mock scan result
         """
         # Setup mock
-        mock_orchestrator.scan_portfolio.return_value = mock_scan_result
+        mock_orchestrator.scan_portfolio = AsyncMock(return_value=mock_scan_result)
         
         # Patch the PortfolioScanOrchestrator to return our mock
         with patch('main.PortfolioScanOrchestrator', return_value=mock_orchestrator):
@@ -324,7 +324,7 @@ class TestTestPortfolioScan:
             mock_orchestrator: Mocked PortfolioScanOrchestrator
         """
         # Setup mock to raise an exception
-        mock_orchestrator.scan_portfolio.side_effect = Exception("Test exception")
+        mock_orchestrator.scan_portfolio = AsyncMock(side_effect=Exception("Test exception"))
         
         # Patch the PortfolioScanOrchestrator to return our mock
         with patch('main.PortfolioScanOrchestrator', return_value=mock_orchestrator):
@@ -349,7 +349,7 @@ class TestScanSinglePortfolio:
             mock_scan_result: Mock scan result
         """
         # Setup mock
-        mock_orchestrator.scan_portfolio.return_value = mock_scan_result
+        mock_orchestrator.scan_portfolio = AsyncMock(return_value=mock_scan_result)
         
         # Patch the PortfolioScanOrchestrator to return our mock
         with patch('main.PortfolioScanOrchestrator', return_value=mock_orchestrator):
@@ -369,7 +369,7 @@ class TestScanSinglePortfolio:
             mock_orchestrator: Mocked PortfolioScanOrchestrator
         """
         # Setup mock to raise an exception
-        mock_orchestrator.scan_portfolio.side_effect = Exception("Test exception")
+        mock_orchestrator.scan_portfolio = AsyncMock(side_effect=Exception("Test exception"))
         
         # Patch the PortfolioScanOrchestrator to return our mock
         with patch('main.PortfolioScanOrchestrator', return_value=mock_orchestrator):
@@ -394,7 +394,7 @@ class TestBatchProcessPortfolios:
             mock_batch_results: Mock batch results
         """
         # Setup mock to return different results for different funds
-        def side_effect(fund_name):
+        async def side_effect(fund_name):
             for result in mock_batch_results:
                 if result["fund_name"] == fund_name:
                     return result
@@ -425,7 +425,7 @@ class TestBatchProcessPortfolios:
             mock_orchestrator: Mocked PortfolioScanOrchestrator
         """
         # Setup mock to raise an exception for one fund
-        def side_effect(fund_name):
+        async def side_effect(fund_name):
             if fund_name == "Fund 2":
                 raise Exception("Test exception for Fund 2")
             return {
@@ -566,7 +566,7 @@ class TestMain:
             mock_settings: Mocked Settings class
         """
         # Setup mocks
-        mock_orchestrator.scan_portfolio.return_value = mock_scan_result
+        mock_orchestrator.scan_portfolio = AsyncMock(return_value=mock_scan_result)
         
         # Patch dependencies
         with patch('main.argparse.ArgumentParser') as mock_parser, \
@@ -600,7 +600,7 @@ class TestMain:
             mock_settings: Mocked Settings class
         """
         # Setup mocks
-        mock_orchestrator.scan_portfolio.return_value = mock_scan_result
+        mock_orchestrator.scan_portfolio = AsyncMock(return_value=mock_scan_result)
         
         # Patch dependencies
         with patch('main.argparse.ArgumentParser') as mock_parser, \
@@ -636,7 +636,7 @@ class TestMain:
             mock_settings: Mocked Settings class
         """
         # Setup mocks
-        mock_orchestrator.scan_portfolio.return_value = mock_batch_results[0]
+        mock_orchestrator.scan_portfolio = AsyncMock(return_value=mock_batch_results[0])
         
         # Patch dependencies
         with patch('main.argparse.ArgumentParser') as mock_parser, \

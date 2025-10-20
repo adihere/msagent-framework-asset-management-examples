@@ -8,7 +8,8 @@ in the financial portfolio monitoring system.
 import json
 import logging
 import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Annotated
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
@@ -74,18 +75,26 @@ def format_report_data(analysis_results: Dict[str, Any]) -> Dict[str, Any]:
     raise NotImplementedError("format_report_data is not yet implemented")
 
 
-def get_portfolio_holdings(fund_name: str) -> str:
+def get_portfolio_holdings(
+    fund_name: Annotated[str, Field(description="The name of the fund to retrieve holdings for")]
+) -> Annotated[str, Field(description="JSON string containing portfolio holdings data")]:
     """
     Retrieve portfolio holdings data for a specified fund.
     
     This function returns mock portfolio data in JSON format, including fund information,
-    holdings with details, sector allocation, and timestamp.
+    holdings with details, sector allocation, and timestamp. It's designed to be used as
+    a tool function with the Microsoft Agent Framework.
     
     Args:
-        fund_name (str): The name of the fund to retrieve holdings for
+        fund_name: The name of the fund to retrieve holdings for
         
     Returns:
-        str: JSON string containing portfolio holdings data
+        JSON string containing portfolio holdings data with the following structure:
+        - fund_name: The name of the fund
+        - total_value: Total value of the portfolio
+        - holdings: List of holdings with ticker, name, weight, and value
+        - sector_allocation: List of sector allocations with sector and weight
+        - last_updated: Timestamp of when the data was last updated
         
     Raises:
         ValueError: If fund_name is empty or None
@@ -181,18 +190,30 @@ def get_portfolio_holdings(fund_name: str) -> str:
         raise RuntimeError(error_msg)
 
 
-def scan_market_news(tickers: List[str]) -> str:
+def scan_market_news(
+    tickers: Annotated[List[str], Field(description="List of stock tickers to scan for news")]
+) -> Annotated[str, Field(description="JSON string containing market news data with alerts for each ticker")]:
     """
     Scan market news for specified tickers and return mock news data.
     
     This function returns mock market news data in JSON format, including scan timestamp
-    and alerts with detailed information about each ticker.
+    and alerts with detailed information about each ticker. It's designed to be used as
+    a tool function with the Microsoft Agent Framework.
     
     Args:
-        tickers (List[str]): List of stock tickers to scan for news
+        tickers: List of stock tickers to scan for news
         
     Returns:
-        str: JSON string containing market news data with alerts for each ticker
+        JSON string containing market news data with the following structure:
+        - scan_timestamp: Timestamp of when the news was scanned
+        - alerts: List of news alerts for each ticker with details like:
+          * ticker: Stock ticker symbol
+          * alert_type: Type of news alert (e.g., Earnings Report, Regulatory)
+          * severity: Severity level (Low, Medium, High)
+          * headline: News headline
+          * sentiment: Sentiment of the news (Positive, Negative, Neutral)
+          * impact_score: Impact score of the news
+          * source: News source
         
     Raises:
         ValueError: If tickers list is empty or contains invalid ticker symbols
@@ -339,21 +360,36 @@ def scan_market_news(tickers: List[str]) -> str:
         raise RuntimeError(error_msg)
 
 
-def analyze_risk_exposure(portfolio_data: str, news_data: str) -> str:
+def analyze_risk_exposure(
+    portfolio_data: Annotated[str, Field(description="JSON string containing portfolio data")],
+    news_data: Annotated[str, Field(description="JSON string containing market news data")]
+) -> Annotated[str, Field(description="JSON string containing risk analysis results")]:
     """
     Analyze risk exposure based on portfolio data and market news.
     
     This function parses JSON input parameters (portfolio_data and news_data),
     performs risk analysis, and returns mock risk analysis data in JSON format.
     The analysis includes overall risk level, risk score, key findings, action items,
-    and exposure metrics.
+    and exposure metrics. It's designed to be used as a tool function with the
+    Microsoft Agent Framework.
     
     Args:
-        portfolio_data (str): JSON string containing portfolio data
-        news_data (str): JSON string containing market news data
+        portfolio_data: JSON string containing portfolio data with holdings and sector allocation
+        news_data: JSON string containing market news data with alerts for portfolio tickers
         
     Returns:
-        str: JSON string containing risk analysis results
+        JSON string containing risk analysis results with the following structure:
+        - analysis_timestamp: Timestamp of when the analysis was performed
+        - overall_risk_level: Overall risk level (Low, Medium, High, Critical)
+        - risk_score: Risk score from 0-100
+        - key_findings: List of key findings from the risk analysis
+        - action_items: List of actionable recommendations
+        - exposure_metrics: Dictionary with various exposure metrics including:
+          * concentration_risk: Risk from portfolio concentration
+          * news_sentiment_impact: Impact from news sentiment
+          * volatility_exposure: Exposure to market volatility
+          * liquidity_risk: Liquidity risk assessment
+          * market_risk: Overall market risk exposure
         
     Raises:
         ValueError: If input parameters are empty or invalid
@@ -503,5 +539,116 @@ def analyze_risk_exposure(portfolio_data: str, news_data: str) -> str:
             
     except Exception as e:
         error_msg = f"Failed to perform risk analysis: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+
+def register_tools_with_azure_agent(agent) -> None:
+    """
+    Register all tool functions with an Azure AI Agent.
+    
+    This helper function registers the portfolio analysis tool functions
+    with an Azure AI Agent instance for use in financial portfolio scanning.
+    
+    Args:
+        agent: An Azure AI Agent instance to register tools with
+        
+    Raises:
+        ValueError: If agent is None or doesn't support tool registration
+        RuntimeError: If tool registration fails
+    """
+    if agent is None:
+        error_msg = "Agent cannot be None"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    try:
+        # Register the portfolio analysis tools
+        if hasattr(agent, 'register_tool'):
+            agent.register_tool("get_portfolio_holdings", get_portfolio_holdings)
+            agent.register_tool("scan_market_news", scan_market_news)
+            agent.register_tool("analyze_risk_exposure", analyze_risk_exposure)
+            logger.info("Successfully registered tool functions with Azure AI Agent")
+        else:
+            error_msg = "Agent does not support tool registration"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+    except Exception as e:
+        error_msg = f"Failed to register tools with Azure AI Agent: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+
+def get_tool_definitions() -> List[Dict[str, Any]]:
+    """
+    Get tool definitions for the portfolio analysis functions.
+    
+    This helper function returns tool definitions that can be used
+    to register the portfolio analysis tools with the Azure AI Agent Framework.
+    
+    Returns:
+        List[Dict[str, Any]]: List of tool definitions for Azure AI Agent Framework
+        
+    Raises:
+        RuntimeError: If tool definition generation fails
+    """
+    try:
+        tool_definitions = [
+            {
+                "name": "get_portfolio_holdings",
+                "description": "Retrieve portfolio holdings data for a specified fund",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "fund_name": {
+                            "type": "string",
+                            "description": "The name of the fund to retrieve holdings for"
+                        }
+                    },
+                    "required": ["fund_name"]
+                }
+            },
+            {
+                "name": "scan_market_news",
+                "description": "Scan market news for specified tickers and return news data",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tickers": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "List of stock tickers to scan for news"
+                        }
+                    },
+                    "required": ["tickers"]
+                }
+            },
+            {
+                "name": "analyze_risk_exposure",
+                "description": "Analyze risk exposure based on portfolio data and market news",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "portfolio_data": {
+                            "type": "string",
+                            "description": "JSON string containing portfolio data"
+                        },
+                        "news_data": {
+                            "type": "string",
+                            "description": "JSON string containing market news data"
+                        }
+                    },
+                    "required": ["portfolio_data", "news_data"]
+                }
+            }
+        ]
+        
+        logger.debug("Generated tool definitions for Azure AI Agent Framework")
+        return tool_definitions
+        
+    except Exception as e:
+        error_msg = f"Failed to generate tool definitions: {str(e)}"
         logger.error(error_msg)
         raise RuntimeError(error_msg)

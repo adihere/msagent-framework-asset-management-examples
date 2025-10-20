@@ -1,7 +1,12 @@
 # Financial Portfolio Scanner - Dependencies
 
 # Microsoft Agent Framework for building AI agents
-agent-framework>=1.0.0b251016
+microsoft-agents>=0.1.0b6
+
+# Azure AI Agent Client for Azure integration
+azure-ai-projects>=1.0.0b6
+azure-identity>=1.16.0
+azure-core>=1.30.0
 
 # OpenAI API integration for AI capabilities
 openai>=1.54.0

@@ -21,6 +21,17 @@ class Settings:
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_CHAT_MODEL_ID: str = os.getenv("OPENAI_CHAT_MODEL_ID", "gpt-4o")
     
+    # Azure AI Configuration
+    AZURE_AI_PROJECT_NAME: str = os.getenv("AZURE_AI_PROJECT_NAME", "")
+    AZURE_AI_PROJECT_CONNECTION_STRING: str = os.getenv("AZURE_AI_PROJECT_CONNECTION_STRING", "")
+    AZURE_AI_SUBSCRIPTION_ID: str = os.getenv("AZURE_AI_SUBSCRIPTION_ID", "")
+    AZURE_AI_RESOURCE_GROUP_NAME: str = os.getenv("AZURE_AI_RESOURCE_GROUP_NAME", "")
+    AZURE_OPENAI_API_KEY: str = os.getenv("AZURE_OPENAI_API_KEY", "")
+    AZURE_OPENAI_ENDPOINT: str = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+    AZURE_OPENAI_API_VERSION: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+    AZURE_OPENAI_CHAT_DEPLOYMENT_NAME: str = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "")
+    AZURE_OPENAI_CHAT_MODEL_ID: str = os.getenv("AZURE_OPENAI_CHAT_MODEL_ID", "gpt-4")
+    
     # Application Configuration
     DEBUG_MODE: bool = os.getenv("DEBUG_MODE", "true").lower() == "true"
         

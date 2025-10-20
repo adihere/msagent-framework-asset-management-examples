@@ -55,7 +55,12 @@ All required packages are listed in [`requirements.txt`](financial_portfolio_sca
 
 ```
 # Microsoft Agent Framework for building AI agents
-agent-framework>=1.0.0b251016
+microsoft-agents>=0.1.0b6
+
+# Azure AI Agent Client for Azure integration
+azure-ai-projects>=1.0.0b6
+azure-identity>=1.16.0
+azure-core>=1.30.0
 
 # OpenAI API integration for AI capabilities
 openai>=1.54.0
@@ -85,7 +90,9 @@ pytest-cov>=2.12.0
 
 ### API Requirements
 - **OpenAI API Key**: Required for AI-powered analysis and report generation
-- **Optional Financial Data APIs**: 
+- **Azure AI Project**: Optional, for enhanced AI capabilities with Azure AI Agent Framework
+- **Azure OpenAI Resource**: Optional, for using Azure-hosted OpenAI models
+- **Optional Financial Data APIs**:
   - Finnhub API (optional)
   - Bloomberg API (optional)
   - FactSet API (optional)
@@ -171,7 +178,23 @@ DEBUG_MODE=true
 LOG_LEVEL=INFO
 ```
 
-### Optional Configuration
+### Optional Azure AI Configuration
+For Azure AI Agent Framework integration, configure the following parameters:
+
+```bash
+# Azure AI Configuration
+AZURE_AI_PROJECT_NAME=your_azure_ai_project_name
+AZURE_AI_PROJECT_CONNECTION_STRING=your_azure_ai_project_connection_string
+AZURE_AI_SUBSCRIPTION_ID=your_azure_subscription_id
+AZURE_AI_RESOURCE_GROUP_NAME=your_azure_resource_group_name
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_API_VERSION=2024-02-15-preview
+AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=your_chat_deployment_name
+AZURE_OPENAI_CHAT_MODEL_ID=gpt-4
+```
+
+### Other Optional Configuration
 The following parameters are optional but recommended for enhanced functionality:
 
 ```bash
@@ -216,6 +239,40 @@ To use the AI-powered features of the Financial Portfolio Scanner, you need an O
 
 4. **Verify API Key Setup**:
    Run a test scan to verify that your API key is working correctly:
+   ```bash
+   python main.py --test
+   ```
+
+### Setting Up Azure AI Agent Framework (Optional)
+For enhanced capabilities with Azure AI Agent Framework:
+
+1. **Create an Azure AI Project**:
+   - Log in to the Azure Portal
+   - Create a new Azure AI project
+   - Note down your project name, subscription ID, and resource group name
+
+2. **Create an Azure OpenAI Resource**:
+   - In the Azure Portal, create an Azure OpenAI resource
+   - Deploy a chat model (e.g., GPT-4)
+   - Note down the endpoint, API key, and deployment name
+
+3. **Configure Azure AI Settings**:
+   Add the following to your `.env` file:
+   ```bash
+   # Azure AI Configuration
+   AZURE_AI_PROJECT_NAME=your_azure_ai_project_name
+   AZURE_AI_PROJECT_CONNECTION_STRING=your_azure_ai_project_connection_string
+   AZURE_AI_SUBSCRIPTION_ID=your_azure_subscription_id
+   AZURE_AI_RESOURCE_GROUP_NAME=your_azure_resource_group_name
+   AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+   AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+   AZURE_OPENAI_API_VERSION=2024-02-15-preview
+   AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=your_chat_deployment_name
+   AZURE_OPENAI_CHAT_MODEL_ID=gpt-4
+   ```
+
+4. **Verify Azure AI Setup**:
+   Run a test scan to verify that your Azure AI configuration is working correctly:
    ```bash
    python main.py --test
    ```

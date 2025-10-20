@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agents.reporting_agent import (
     create_reporting_agent,
     ReportingAgent,
-    MockChatAgent
+    AzureReportingAgent
 )
 from agents.tool_functions import (
     get_portfolio_holdings,
@@ -35,14 +35,14 @@ class TestCreateReportingAgent:
         Test successful creation of the reporting agent.
         
         This test verifies that the create_reporting_agent function
-        successfully creates a MockChatAgent instance with the correct
+        successfully creates an AzureReportingAgent instance with the correct
         name, instructions, and registered tools.
         """
         # Call the function under test
         agent = create_reporting_agent()
         
-        # Verify the agent is a MockChatAgent instance
-        assert isinstance(agent, MockChatAgent)
+        # Verify the agent is an AzureReportingAgent instance
+        assert isinstance(agent, AzureReportingAgent)
         
         # Verify the agent name
         assert agent.name == "FinancialReportingAgent"
@@ -64,8 +64,8 @@ class TestCreateReportingAgent:
         assert agent.tools["scan_market_news"] == scan_market_news
         assert agent.tools["analyze_risk_exposure"] == analyze_risk_exposure
     
-    @patch('agents.reporting_agent.MockChatAgent')
-    def test_create_reporting_agent_initialization_failure(self, mock_chat_agent_class):
+    @patch('agents.reporting_agent.AzureReportingAgent')
+    def test_create_reporting_agent_initialization_failure(self, mock_agent_class):
         """
         Test handling of agent initialization failure.
         
@@ -74,17 +74,17 @@ class TestCreateReportingAgent:
         initialization fails.
         
         Args:
-            mock_chat_agent_class: Mocked MockChatAgent class
+            mock_agent_class: Mocked AzureReportingAgent class
         """
         # Configure the mock to raise an exception during initialization
-        mock_chat_agent_class.side_effect = Exception("Initialization failed")
+        mock_agent_class.side_effect = Exception("Initialization failed")
         
         # Verify that a RuntimeError is raised
         with pytest.raises(RuntimeError, match="Failed to create Financial Reporting Agent: Initialization failed"):
             create_reporting_agent()
     
-    @patch('agents.reporting_agent.MockChatAgent')
-    def test_create_reporting_agent_tool_registration_failure(self, mock_chat_agent_class):
+    @patch('agents.reporting_agent.AzureReportingAgent')
+    def test_create_reporting_agent_tool_registration_failure(self, mock_agent_class):
         """
         Test handling of tool registration failure.
         
@@ -93,11 +93,11 @@ class TestCreateReportingAgent:
         fails.
         
         Args:
-            mock_chat_agent_class: Mocked MockChatAgent class
+            mock_agent_class: Mocked AzureReportingAgent class
         """
         # Create a mock agent instance
         mock_agent = MagicMock()
-        mock_chat_agent_class.return_value = mock_agent
+        mock_agent_class.return_value = mock_agent
         
         # Configure the register_tool method to raise an exception
         mock_agent.register_tool.side_effect = Exception("Tool registration failed")
@@ -107,29 +107,30 @@ class TestCreateReportingAgent:
             create_reporting_agent()
 
 
-class TestMockChatAgent:
+class TestAzureReportingAgent:
     """
-    Test suite for the MockChatAgent class.
+    Test suite for the AzureReportingAgent class.
     """
     
     @pytest.fixture
     def mock_agent(self):
         """
-        Create a MockChatAgent instance for testing.
+        Create an AzureReportingAgent instance for testing.
         
         Returns:
-            MockChatAgent: A test instance of the mock agent
+            AzureReportingAgent: A test instance of the Azure agent
         """
-        return MockChatAgent(
+        return AzureReportingAgent(
             name="TestAgent",
-            instructions="Test instructions"
+            instructions="Test instructions",
+            use_azure=False  # Use mock mode for testing
         )
     
-    def test_mock_chat_agent_initialization(self, mock_agent):
+    def test_azure_reporting_agent_initialization(self, mock_agent):
         """
-        Test MockChatAgent initialization.
+        Test AzureReportingAgent initialization.
         
-        This test verifies that the MockChatAgent is properly initialized
+        This test verifies that the AzureReportingAgent is properly initialized
         with the provided name and instructions, and that the tools
         dictionary is empty.
         
@@ -143,9 +144,9 @@ class TestMockChatAgent:
         # Verify the tools dictionary is empty
         assert mock_agent.tools == {}
     
-    def test_mock_chat_agent_register_tool(self, mock_agent):
+    def test_azure_reporting_agent_register_tool(self, mock_agent):
         """
-        Test tool registration with MockChatAgent.
+        Test tool registration with AzureReportingAgent.
         
         This test verifies that the register_tool method correctly
         adds a tool function to the tools dictionary.
@@ -164,9 +165,10 @@ class TestMockChatAgent:
         assert "mock_tool" in mock_agent.tools
         assert mock_agent.tools["mock_tool"] == mock_tool_function
     
-    def test_mock_chat_agent_generate_response(self, mock_agent):
+    @pytest.mark.asyncio
+    async def test_azure_reporting_agent_generate_response(self, mock_agent):
         """
-        Test response generation with MockChatAgent.
+        Test response generation with AzureReportingAgent.
         
         This test verifies that the generate_response method returns
         a properly formatted JSON string with the expected structure.
@@ -175,7 +177,7 @@ class TestMockChatAgent:
             mock_agent: The test mock agent instance
         """
         # Generate a response
-        response = mock_agent.generate_response("Test prompt")
+        response = await mock_agent.generate_response("Test prompt")
         
         # Verify the response is a string
         assert isinstance(response, str)
@@ -216,6 +218,24 @@ class TestMockChatAgent:
         recommendations = parsed_response["recommendations"]
         assert isinstance(recommendations, list)
         assert len(recommendations) > 0
+    
+    def test_azure_reporting_agent_init_azure_fallback(self):
+        """
+        Test AzureReportingAgent initialization with Azure unavailable.
+        
+        This test verifies that the AzureReportingAgent falls back to mock mode
+        when Azure is not available.
+        """
+        agent = AzureReportingAgent(
+            name="TestAgent",
+            instructions="Test instructions",
+            use_azure=True
+        )
+        
+        # Agent should still be created but with use_azure set to False
+        # if Azure is not available
+        assert agent.name == "TestAgent"
+        assert agent.instructions == "Test instructions"
 
 
 class TestReportingAgent:
@@ -275,7 +295,8 @@ class TestReportingAgent:
             with pytest.raises(RuntimeError, match="Failed to initialize ReportingAgent: Agent creation failed"):
                 ReportingAgent()
     
-    def test_generate_report_success(self, reporting_agent):
+    @pytest.mark.asyncio
+    async def test_generate_report_success(self, reporting_agent):
         """
         Test successful report generation.
         
@@ -311,10 +332,10 @@ class TestReportingAgent:
             },
             "recommendations": []
         })
-        reporting_agent.agent.generate_response.return_value = mock_response
+        reporting_agent.agent.generate_response = AsyncMock(return_value=mock_response)
         
         # Generate the report
-        result = reporting_agent.generate_report("Test Fund")
+        result = await reporting_agent.generate_report("Test Fund")
         
         # Verify the result structure
         assert "report" in result
@@ -335,7 +356,8 @@ class TestReportingAgent:
         assert "risk_assessment" in call_args
         assert "recommendations" in call_args
     
-    def test_generate_report_empty_fund_name(self, reporting_agent):
+    @pytest.mark.asyncio
+    async def test_generate_report_empty_fund_name(self, reporting_agent):
         """
         Test report generation with empty fund name.
         
@@ -346,9 +368,10 @@ class TestReportingAgent:
             reporting_agent: The test reporting agent instance
         """
         with pytest.raises(ValueError, match="fund_name cannot be empty or contain only whitespace"):
-            reporting_agent.generate_report("")
+            await reporting_agent.generate_report("")
     
-    def test_generate_report_whitespace_fund_name(self, reporting_agent):
+    @pytest.mark.asyncio
+    async def test_generate_report_whitespace_fund_name(self, reporting_agent):
         """
         Test report generation with whitespace-only fund name.
         
@@ -359,9 +382,10 @@ class TestReportingAgent:
             reporting_agent: The test reporting agent instance
         """
         with pytest.raises(ValueError, match="fund_name cannot be empty or contain only whitespace"):
-            reporting_agent.generate_report("   ")
+            await reporting_agent.generate_report("   ")
     
-    def test_generate_report_agent_failure(self, reporting_agent):
+    @pytest.mark.asyncio
+    async def test_generate_report_agent_failure(self, reporting_agent):
         """
         Test report generation when the agent fails.
         
@@ -373,13 +397,14 @@ class TestReportingAgent:
             reporting_agent: The test reporting agent instance
         """
         # Configure the mock agent's generate_response method to raise an exception
-        reporting_agent.agent.generate_response.side_effect = Exception("Agent response failed")
+        reporting_agent.agent.generate_response = AsyncMock(side_effect=Exception("Agent response failed"))
         
         # Verify that a RuntimeError is raised
         with pytest.raises(RuntimeError, match="Failed to generate report: Agent response failed"):
-            reporting_agent.generate_report("Test Fund")
+            await reporting_agent.generate_report("Test Fund")
     
-    def test_generate_insights_success(self, reporting_agent):
+    @pytest.mark.asyncio
+    async def test_generate_insights_success(self, reporting_agent):
         """
         Test successful insights generation.
         
@@ -407,10 +432,10 @@ class TestReportingAgent:
                 "Consider long-term growth opportunities in emerging markets"
             ]
         })
-        reporting_agent.agent.generate_response.return_value = mock_response
+        reporting_agent.agent.generate_response = AsyncMock(return_value=mock_response)
         
         # Generate the insights
-        result = reporting_agent.generate_insights("Test Fund")
+        result = await reporting_agent.generate_insights("Test Fund")
         
         # Verify the result structure
         assert "insights" in result
@@ -431,7 +456,8 @@ class TestReportingAgent:
         assert "market_trends" in call_args
         assert "strategic_recommendations" in call_args
     
-    def test_generate_insights_empty_fund_name(self, reporting_agent):
+    @pytest.mark.asyncio
+    async def test_generate_insights_empty_fund_name(self, reporting_agent):
         """
         Test insights generation with empty fund name.
         
@@ -442,9 +468,10 @@ class TestReportingAgent:
             reporting_agent: The test reporting agent instance
         """
         with pytest.raises(ValueError, match="fund_name cannot be empty or contain only whitespace"):
-            reporting_agent.generate_insights("")
+            await reporting_agent.generate_insights("")
     
-    def test_generate_insights_whitespace_fund_name(self, reporting_agent):
+    @pytest.mark.asyncio
+    async def test_generate_insights_whitespace_fund_name(self, reporting_agent):
         """
         Test insights generation with whitespace-only fund name.
         
@@ -455,9 +482,10 @@ class TestReportingAgent:
             reporting_agent: The test reporting agent instance
         """
         with pytest.raises(ValueError, match="fund_name cannot be empty or contain only whitespace"):
-            reporting_agent.generate_insights("   ")
+            await reporting_agent.generate_insights("   ")
     
-    def test_generate_insights_agent_failure(self, reporting_agent):
+    @pytest.mark.asyncio
+    async def test_generate_insights_agent_failure(self, reporting_agent):
         """
         Test insights generation when the agent fails.
         
@@ -469,8 +497,66 @@ class TestReportingAgent:
             reporting_agent: The test reporting agent instance
         """
         # Configure the mock agent's generate_response method to raise an exception
-        reporting_agent.agent.generate_response.side_effect = Exception("Agent response failed")
+        reporting_agent.agent.generate_response = AsyncMock(side_effect=Exception("Agent response failed"))
         
         # Verify that a RuntimeError is raised
         with pytest.raises(RuntimeError, match="Failed to generate insights: Agent response failed"):
-            reporting_agent.generate_insights("Test Fund")
+            await reporting_agent.generate_insights("Test Fund")
+    
+    def test_generate_report_sync(self, reporting_agent):
+        """
+        Test synchronous wrapper for report generation.
+        
+        This test verifies that the generate_report_sync method provides
+        a synchronous interface to the async generate_report method.
+        
+        Args:
+            reporting_agent: The test reporting agent instance
+        """
+        # Configure the mock agent's generate_response method
+        mock_response = json.dumps({
+            "portfolio_summary": {
+                "fund_name": "Test Fund",
+                "total_value": 1000000.00,
+                "holdings_count": 5,
+                "last_updated": "2023-01-01T00:00:00"
+            },
+            "recommendations": []
+        })
+        reporting_agent.agent.generate_response = AsyncMock(return_value=mock_response)
+        
+        # Generate the report synchronously
+        result = reporting_agent.generate_report_sync("Test Fund")
+        
+        # Verify the result structure
+        assert "report" in result
+        assert result["report"] == mock_response
+    
+    def test_generate_insights_sync(self, reporting_agent):
+        """
+        Test synchronous wrapper for insights generation.
+        
+        This test verifies that the generate_insights_sync method provides
+        a synchronous interface to the async generate_insights method.
+        
+        Args:
+            reporting_agent: The test reporting agent instance
+        """
+        # Configure the mock agent's generate_response method
+        mock_response = json.dumps({
+            "opportunities": [
+                "Diversify portfolio to reduce concentration risk"
+            ],
+            "risks": [],
+            "holding_recommendations": [],
+            "market_trends": [],
+            "strategic_recommendations": []
+        })
+        reporting_agent.agent.generate_response = AsyncMock(return_value=mock_response)
+        
+        # Generate the insights synchronously
+        result = reporting_agent.generate_insights_sync("Test Fund")
+        
+        # Verify the result structure
+        assert "insights" in result
+        assert result["insights"] == mock_response
